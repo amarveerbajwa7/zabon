@@ -24,7 +24,7 @@ const steps = [
       </svg>
     ),
     title: 'Upload your statement',
-    desc: 'Drop in your RBC or other bank CSV. No formatting required — ZABON handles the parsing.',
+    desc: 'Drop in a CSV or PDF from any bank or credit card. No formatting required — ZABON handles the parsing.',
   },
   {
     num: '02',
@@ -65,8 +65,8 @@ const features = [
         <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
       </svg>
     ),
-    title: 'RBC Format Support',
-    desc: 'Native support for RBC bank statement exports. More Canadian banks coming soon.',
+    title: 'Universal Bank Support',
+    desc: 'Works with any Canadian or US bank — TD, RBC, Scotiabank, BMO, CIBC, Amex, and more. CSV or PDF.',
     accent: '#2BAE8E',
   },
   {
@@ -320,7 +320,7 @@ export default function HomePage() {
             </p>
             <div className="mt-10 grid sm:grid-cols-3 gap-6 text-center">
               {[
-                { stat: 'RBC native', desc: 'First bank supported, more coming' },
+                { stat: 'Any bank', desc: 'TD, Scotiabank, BMO, CIBC, Amex & more' },
                 { stat: 'QBO sync', desc: 'Direct QuickBooks Online integration' },
                 { stat: 'CAD first', desc: 'Canadian tax categories out of the box' },
               ].map((item, i) => (
@@ -370,7 +370,7 @@ export default function HomePage() {
                   'QuickBooks Online sync',
                   'Confidence scoring & review workflow',
                   'Full audit trail',
-                  'RBC format support',
+                  'Any bank or credit card',
                 ].map((item, i) => (
                   <li key={i} className="flex items-center gap-3 text-sm">
                     <span className="w-4 h-4 rounded-full flex items-center justify-center flex-shrink-0 text-[10px]" style={{ backgroundColor: '#2BAE8E22', color: '#2BAE8E' }}>✓</span>

@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState, useCallback } from 'react'
+import { createBrowserClient } from '@/lib/supabase'
 
 interface UploadRecord {
   id: string
@@ -61,7 +62,11 @@ export function DocumentList({ selectedId, onSelect, onDelete, refreshTrigger }:
   const fetchUploads = useCallback(async () => {
     setLoading(true)
     try {
-      const res = await fetch('/api/uploads')
+      const supabase = createBrowserClient()
+      const { data: { session } } = await supabase.auth.getSession()
+      const headers: Record<string, string> = {}
+      if (session?.access_token) headers['Authorization'] = `Bearer ${session.access_token}`
+      const res = await fetch('/api/uploads', { headers })
       if (res.ok) {
         const data = await res.json()
         setUploads(data.uploads ?? [])

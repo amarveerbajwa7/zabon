@@ -1,6 +1,8 @@
 'use client'
 
-import { useState, FormEvent } from 'react'
+export const dynamic = 'force-dynamic'
+
+import { useState, FormEvent, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import { createBrowserClient } from '@/lib/supabase'
 
@@ -16,7 +18,7 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false)
   const [magicState, setMagicState] = useState<MagicState>('idle')
 
-  const supabase = createBrowserClient()
+  const supabase = useMemo(() => createBrowserClient(), [])
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault()

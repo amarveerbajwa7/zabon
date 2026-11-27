@@ -289,87 +289,22 @@ function DashboardContent() {
               <span style={{ color: '#2BAE8E' }}>b</span>on
             </span>
             <span className="text-zinc-700 text-xs">AI Bookkeeper</span>
-            {activeClient && (
-              <>
-                <span className="text-zinc-700">·</span>
-                <span className="text-zinc-400 text-sm font-medium">{activeClient.name}</span>
-              </>
-            )}
+
           </div>
-          <div className="flex items-center gap-3">
-            <button
+          <button
               onClick={handleSignOut}
               className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors px-3 py-1.5 rounded-lg hover:bg-zinc-800"
             >
               Sign out
             </button>
-            {qboConnected ? (
-              <span className="flex items-center gap-1.5 text-xs text-emerald-400 bg-emerald-900/30 border border-emerald-800/50 px-3 py-1.5 rounded-full">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                QuickBooks Connected
-              </span>
-            ) : (
-              <a
-                href={qboConnectUrl}
-                className="flex items-center gap-2 px-4 py-2 text-black text-sm font-semibold rounded-lg transition-all hover:brightness-110 active:scale-95"
-                style={{ backgroundColor: '#D4883A' }}
-              >
-                Connect QuickBooks
-              </a>
-            )}
-          </div>
         </div>
       </header>
 
-      <main className="max-w-7xl mx-auto px-4 py-8 space-y-6">
-        {/* Notifications */}
-        {notice && (
-          <div className="flex items-center justify-between p-4 bg-emerald-900/20 border border-emerald-800/50 rounded-xl text-emerald-300 text-sm">
-            {notice}
-            <button onClick={() => setNotice(null)} className="text-emerald-600 hover:text-emerald-400 ml-4">
-              ✕
-            </button>
-          </div>
-        )}
-        {error && (
-          <div className="flex items-center justify-between p-4 bg-red-900/20 border border-red-800/50 rounded-xl text-red-300 text-sm">
-            {error}
-            <button onClick={() => setError(null)} className="text-red-600 hover:text-red-400 ml-4">
-              ✕
-            </button>
-          </div>
-        )}
+      <main className="max-w-7xl mx-auto px-4 py-6 space-y-6">
 
-        {/* Stats */}
-        {transactions.length > 0 && (
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-            {[
-              { label: 'Total', value: stats.total, color: 'text-white' },
-              { label: 'Awaiting Review', value: stats.pending, color: 'text-amber-400' },
-              { label: 'Approved', value: stats.approved, color: 'text-emerald-400' },
-              {
-                label: 'Flagged',
-                value: stats.flagged,
-                color: stats.flagged > 0 ? 'text-red-400' : 'text-zinc-600',
-              },
-              {
-                label: 'Total Expenses',
-                value: `$${stats.totalExpenses.toLocaleString('en-CA', { minimumFractionDigits: 2 })}`,
-                color: 'text-indigo-400',
-              },
-            ].map(stat => (
-              <div key={stat.label} className="bg-zinc-900 border border-zinc-800 rounded-xl p-4">
-                <div className={`text-2xl font-bold ${stat.color}`}>{stat.value}</div>
-                <div className="text-zinc-500 text-xs mt-1">{stat.label}</div>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* Main 2-column layout */}
-        <div className="flex gap-6 items-start">
-          {/* Left sidebar — Client switcher + Document list */}
-          <div className="w-72 shrink-0 space-y-4">
+        {/* ── Client header bar ── */}
+        <div className="flex items-center justify-between gap-4 flex-wrap pb-4 border-b border-zinc-800">
+          <div className="flex items-center gap-4 flex-wrap">
             <ClientSwitcher
               clients={clients}
               activeClientId={activeClientId}
@@ -377,125 +312,183 @@ function DashboardContent() {
               onAdd={handleClientAdd}
               onDelete={handleClientDelete}
             />
-
-            {activeClientId && (
-              <DocumentList
-                selectedId={selectedUploadId}
-                onSelect={handleDocumentSelect}
-                onDelete={handleDocumentDelete}
-                refreshTrigger={uploadsRefresh}
-                clientId={activeClientId}
-              />
+            {activeClient && (
+              <span className="text-zinc-600 text-xs hidden sm:inline">
+                Dashboard › {activeClient.name}
+              </span>
             )}
           </div>
 
-          {/* Right column — Upload + Transactions */}
-          <div className="flex-1 min-w-0 space-y-6">
-            {/* No client selected / no clients */}
-            {!activeClientId && clients.length === 0 && (
-              <div className="text-center py-24 text-zinc-700">
-                <p className="text-lg">Welcome to ZABON.</p>
-                <p className="text-sm mt-2">Add your first client using the panel on the left to get started.</p>
+          {/* QBO badge — per-client, right side */}
+          <div>
+            {qboConnected || activeClient?.qbo_realm_id ? (
+              <span className="flex items-center gap-1.5 text-xs text-emerald-400 bg-emerald-900/20 border border-emerald-800/40 px-3 py-1.5 rounded-full">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                QBO Connected
+              </span>
+            ) : activeClientId ? (
+              <a
+                href={qboConnectUrl}
+                className="text-xs font-semibold px-3 py-1.5 rounded-lg border border-zinc-700 text-zinc-400 hover:text-zinc-200 hover:border-zinc-500 transition-colors"
+              >
+                Connect QuickBooks
+              </a>
+            ) : null}
+          </div>
+        </div>
+
+        {/* Notifications */}
+        {notice && (
+          <div className="flex items-center justify-between p-4 bg-emerald-900/20 border border-emerald-800/50 rounded-xl text-emerald-300 text-sm">
+            {notice}
+            <button onClick={() => setNotice(null)} className="text-emerald-600 hover:text-emerald-400 ml-4">✕</button>
+          </div>
+        )}
+        {error && (
+          <div className="flex items-center justify-between p-4 bg-red-900/20 border border-red-800/50 rounded-xl text-red-300 text-sm">
+            {error}
+            <button onClick={() => setError(null)} className="text-red-600 hover:text-red-400 ml-4">✕</button>
+          </div>
+        )}
+
+        {/* No clients yet */}
+        {!activeClientId && clients.length === 0 && (
+          <div className="text-center py-24 text-zinc-700">
+            <p className="text-lg">Welcome to ZABON.</p>
+            <p className="text-sm mt-2">Add your first client above to get started.</p>
+          </div>
+        )}
+
+        {activeClientId && (
+          <>
+            {/* Stats */}
+            {transactions.length > 0 && (
+              <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+                {[
+                  { label: 'Total', value: stats.total, color: 'text-white' },
+                  { label: 'Awaiting Review', value: stats.pending, color: 'text-amber-400' },
+                  { label: 'Approved', value: stats.approved, color: 'text-emerald-400' },
+                  {
+                    label: 'Flagged',
+                    value: stats.flagged,
+                    color: stats.flagged > 0 ? 'text-red-400' : 'text-zinc-600',
+                  },
+                  {
+                    label: 'Total Expenses',
+                    value: `$${stats.totalExpenses.toLocaleString('en-CA', { minimumFractionDigits: 2 })}`,
+                    color: 'text-indigo-400',
+                  },
+                ].map(stat => (
+                  <div key={stat.label} className="bg-zinc-900 border border-zinc-800 rounded-xl p-4">
+                    <div className={`text-2xl font-bold ${stat.color}`}>{stat.value}</div>
+                    <div className="text-zinc-500 text-xs mt-1">{stat.label}</div>
+                  </div>
+                ))}
               </div>
             )}
 
-            {activeClientId && (
-              <>
-                {/* Upload zone */}
-                <section>
-                  <h2 className="text-zinc-400 text-xs font-semibold uppercase tracking-widest mb-3">
-                    Upload Statement
+            {/* Upload zone */}
+            <section>
+              <h2 className="text-zinc-400 text-xs font-semibold uppercase tracking-widest mb-3">
+                Upload Statement
+              </h2>
+              <UploadZone
+                onUploadComplete={handleUploadComplete}
+                onError={setError}
+                disabled={false}
+                clientId={activeClientId}
+              />
+            </section>
+
+            {/* Documents — sleek flat list */}
+            <DocumentList
+              selectedId={selectedUploadId}
+              onSelect={handleDocumentSelect}
+              onDelete={handleDocumentDelete}
+              refreshTrigger={uploadsRefresh}
+              clientId={activeClientId}
+            />
+
+            {/* Transaction table */}
+            {transactions.length > 0 && (
+              <section>
+                <div className="flex items-center gap-4 mb-3 flex-wrap">
+                  <h2 className="text-zinc-400 text-xs font-semibold uppercase tracking-widest">
+                    Review Transactions
                   </h2>
-                  <UploadZone
-                    onUploadComplete={handleUploadComplete}
-                    onError={setError}
-                    disabled={false}
-                    clientId={activeClientId}
-                  />
-                </section>
 
-                {/* Transaction table */}
-                {transactions.length > 0 && (
-                  <section>
-                    <div className="flex items-center gap-4 mb-3 flex-wrap">
-                      <h2 className="text-zinc-400 text-xs font-semibold uppercase tracking-widest">
-                        Review Transactions
-                      </h2>
-
-                      {/* Threshold slider */}
-                      <div className="flex items-center gap-2 ml-auto">
-                        <label className="text-zinc-500 text-xs whitespace-nowrap">
-                          Flag below:{' '}
-                          <span className={threshold <= 70 ? 'text-red-400' : threshold <= 85 ? 'text-amber-400' : 'text-zinc-300'}>
-                            {threshold}%
-                          </span>
-                        </label>
-                        <input
-                          type="range"
-                          min={50}
-                          max={100}
-                          step={1}
-                          value={threshold}
-                          onChange={e => setThreshold(Number(e.target.value))}
-                          className="w-24 h-1.5 rounded-full appearance-none cursor-pointer"
-                          style={{ accentColor: '#D4883A' }}
-                        />
-                      </div>
-
-                      {/* Push button */}
-                      {stats.approved > 0 && (
-                        <button
-                          onClick={() => {
-                            const approvedIds = transactions
-                              .filter(t => t.status === 'approved')
-                              .map(t => t.id)
-                            handlePush(approvedIds)
-                          }}
-                          disabled={isPushing || !qboConnected}
-                          className="flex items-center gap-2 px-4 py-2 disabled:opacity-50 disabled:cursor-not-allowed text-black text-sm font-semibold rounded-lg transition-all hover:brightness-110 active:scale-95"
-                          style={{ backgroundColor: '#D4883A' }}
-                        >
-                          {isPushing ? (
-                            <>
-                              <span className="w-3 h-3 border border-white border-t-transparent rounded-full animate-spin" />
-                              Pushing…
-                            </>
-                          ) : (
-                            `→ Push ${stats.approved} to QuickBooks`
-                          )}
-                        </button>
-                      )}
-                    </div>
-
-                    <TransactionTable
-                      transactions={transactions}
-                      onApprove={handleApprove}
-                      onReject={handleReject}
-                      onCategoryChange={handleCategoryChange}
-                      onPush={handlePush}
-                      isPushing={isPushing}
-                      threshold={threshold}
-                      qboAccounts={qboAccounts}
+                  {/* Threshold slider */}
+                  <div className="flex items-center gap-2 ml-auto">
+                    <label className="text-zinc-500 text-xs whitespace-nowrap">
+                      Flag below:{' '}
+                      <span className={threshold <= 70 ? 'text-red-400' : threshold <= 85 ? 'text-amber-400' : 'text-zinc-300'}>
+                        {threshold}%
+                      </span>
+                    </label>
+                    <input
+                      type="range"
+                      min={50}
+                      max={100}
+                      step={1}
+                      value={threshold}
+                      onChange={e => setThreshold(Number(e.target.value))}
+                      className="w-24 h-1.5 rounded-full appearance-none cursor-pointer"
+                      style={{ accentColor: '#D4883A' }}
                     />
-                  </section>
-                )}
-
-                {!transactions.length && !selectedUploadId && (
-                  <div className="text-center py-16 text-zinc-700">
-                    <p className="text-lg">Upload a bank or credit card statement to get started.</p>
-                    <p className="text-sm mt-2">AI will categorize your transactions instantly.</p>
                   </div>
-                )}
 
-                {!transactions.length && selectedUploadId && (
-                  <div className="text-center py-16 text-zinc-700">
-                    <p className="text-lg">No transactions found for this document.</p>
-                  </div>
-                )}
-              </>
+                  {/* Push button */}
+                  {stats.approved > 0 && (
+                    <button
+                      onClick={() => {
+                        const approvedIds = transactions
+                          .filter(t => t.status === 'approved')
+                          .map(t => t.id)
+                        handlePush(approvedIds)
+                      }}
+                      disabled={isPushing || !qboConnected}
+                      className="flex items-center gap-2 px-4 py-2 disabled:opacity-50 disabled:cursor-not-allowed text-black text-sm font-semibold rounded-lg transition-all hover:brightness-110 active:scale-95"
+                      style={{ backgroundColor: '#D4883A' }}
+                    >
+                      {isPushing ? (
+                        <>
+                          <span className="w-3 h-3 border border-white border-t-transparent rounded-full animate-spin" />
+                          Pushing…
+                        </>
+                      ) : (
+                        `→ Push ${stats.approved} to QuickBooks`
+                      )}
+                    </button>
+                  )}
+                </div>
+
+                <TransactionTable
+                  transactions={transactions}
+                  onApprove={handleApprove}
+                  onReject={handleReject}
+                  onCategoryChange={handleCategoryChange}
+                  onPush={handlePush}
+                  isPushing={isPushing}
+                  threshold={threshold}
+                  qboAccounts={qboAccounts}
+                />
+              </section>
             )}
-          </div>
-        </div>
+
+            {!transactions.length && !selectedUploadId && (
+              <div className="text-center py-12 text-zinc-700">
+                <p className="text-base">Select a document above or upload a new statement.</p>
+                <p className="text-sm mt-2">AI will categorize your transactions instantly.</p>
+              </div>
+            )}
+
+            {!transactions.length && selectedUploadId && (
+              <div className="text-center py-12 text-zinc-700">
+                <p className="text-base">No transactions found for this document.</p>
+              </div>
+            )}
+          </>
+        )}
       </main>
     </div>
   )

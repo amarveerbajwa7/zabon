@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
 
 export interface Client {
   id: string
@@ -27,7 +27,28 @@ export function ClientSwitcher({
   const [showAddForm, setShowAddForm] = useState(false)
   const [newClientName, setNewClientName] = useState('')
   const [isAdding, setIsAdding] = useState(false)
+  const [showDropdown, setShowDropdown] = useState(false)
   const [deletingId, setDeletingId] = useState<string | null>(null)
+  const dropdownRef = useRef<HTMLDivElement>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  const activeClient = clients.find(c => c.id === activeClientId) ?? null
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setShowDropdown(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClick)
+    return () => document.removeEventListener('mousedown', handleClick)
+  }, [])
+
+  // Focus input when add form opens
+  useEffect(() => {
+    if (showAddForm) inputRef.current?.focus()
+  }, [showAddForm])
 
   const handleAdd = async () => {
     const name = newClientName.trim()
@@ -50,32 +71,107 @@ export function ClientSwitcher({
       await onDelete(id)
     } finally {
       setDeletingId(null)
+      setShowDropdown(false)
     }
   }
 
-  return (
-    <div className="bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden">
-      {/* Header */}
-      <div className="px-4 py-3 border-b border-zinc-800 flex items-center justify-between">
-        <span className="text-zinc-400 text-xs font-semibold uppercase tracking-widest">
-          Clients
-        </span>
+  // No clients state
+  if (clients.length === 0 && !showAddForm) {
+    return (
+      <div className="flex items-center gap-4">
+        <span className="text-zinc-500 text-sm">No clients yet.</span>
         <button
-          onClick={() => setShowAddForm(v => !v)}
-          className="text-xs px-2 py-1 rounded-md transition-colors"
+          onClick={() => setShowAddForm(true)}
+          className="text-sm font-semibold transition-colors hover:opacity-80"
           style={{ color: '#D4883A' }}
-          title="Add client"
         >
-          + Add
+          Add your first client →
         </button>
       </div>
+    )
+  }
 
-      {/* Add form */}
-      {showAddForm && (
-        <div className="px-4 py-3 border-b border-zinc-800 bg-zinc-950/50">
+  return (
+    <div className="flex items-center gap-3 flex-wrap">
+      {/* Active client name + dropdown trigger */}
+      {clients.length > 0 && (
+        <div className="relative" ref={dropdownRef}>
+          <button
+            onClick={() => setShowDropdown(v => !v)}
+            className="flex items-center gap-2 group"
+          >
+            <span
+              className="text-2xl font-bold tracking-tight"
+              style={{ color: '#D4883A' }}
+            >
+              {activeClient?.name ?? 'Select client'}
+            </span>
+            <svg
+              className={`w-4 h-4 text-zinc-500 transition-transform ${showDropdown ? 'rotate-180' : ''}`}
+              fill="none" viewBox="0 0 24 24" stroke="currentColor"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
+
+          {/* Dropdown panel */}
+          {showDropdown && (
+            <div className="absolute top-full left-0 mt-2 z-30 min-w-[200px] bg-zinc-900 border border-zinc-700 rounded-xl shadow-xl overflow-hidden">
+              {clients.map(client => {
+                const isActive = client.id === activeClientId
+                const isDeleting = deletingId === client.id
+                return (
+                  <div
+                    key={client.id}
+                    className={`group flex items-center gap-2 px-4 py-2.5 cursor-pointer transition-colors ${
+                      isActive ? 'bg-amber-900/20' : 'hover:bg-zinc-800'
+                    }`}
+                    onClick={() => {
+                      onSelect(client.id)
+                      setShowDropdown(false)
+                    }}
+                  >
+                    <div
+                      className={`w-1.5 h-1.5 rounded-full shrink-0 ${
+                        isActive ? 'bg-amber-500' : 'bg-zinc-600'
+                      }`}
+                    />
+                    <span
+                      className={`flex-1 text-sm font-medium truncate ${
+                        isActive ? 'text-amber-400' : 'text-zinc-300'
+                      }`}
+                    >
+                      {client.name}
+                    </span>
+                    <button
+                      onClick={e => handleDelete(client.id, e)}
+                      disabled={isDeleting}
+                      title="Delete client"
+                      className="opacity-0 group-hover:opacity-100 transition-opacity text-zinc-600 hover:text-red-400 disabled:opacity-30 p-0.5 rounded"
+                    >
+                      {isDeleting ? '…' : '✕'}
+                    </button>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Add client button / form */}
+      {!showAddForm ? (
+        <button
+          onClick={() => setShowAddForm(true)}
+          className="flex items-center gap-1 text-xs font-semibold px-3 py-1.5 rounded-lg border border-zinc-700 text-zinc-400 hover:text-zinc-200 hover:border-zinc-600 transition-colors"
+        >
+          + Add Client
+        </button>
+      ) : (
+        <div className="flex items-center gap-2">
           <input
+            ref={inputRef}
             type="text"
-            autoFocus
             placeholder="Client name…"
             value={newClientName}
             onChange={e => setNewClientName(e.target.value)}
@@ -86,97 +182,27 @@ export function ClientSwitcher({
                 setNewClientName('')
               }
             }}
-            className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-white placeholder-zinc-600 outline-none focus:border-amber-600 transition-colors"
+            className="bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-1.5 text-sm text-white placeholder-zinc-600 outline-none focus:border-amber-600 transition-colors w-44"
           />
-          <div className="flex gap-2 mt-2">
-            <button
-              onClick={handleAdd}
-              disabled={isAdding || !newClientName.trim()}
-              className="flex-1 py-1.5 text-xs font-semibold rounded-lg disabled:opacity-50 disabled:cursor-not-allowed text-black transition-all hover:brightness-110"
-              style={{ backgroundColor: '#D4883A' }}
-            >
-              {isAdding ? 'Adding…' : 'Add Client'}
-            </button>
-            <button
-              onClick={() => {
-                setShowAddForm(false)
-                setNewClientName('')
-              }}
-              className="px-3 py-1.5 text-xs rounded-lg bg-zinc-800 text-zinc-400 hover:text-zinc-200 transition-colors"
-            >
-              Cancel
-            </button>
-          </div>
+          <button
+            onClick={handleAdd}
+            disabled={isAdding || !newClientName.trim()}
+            className="text-xs font-semibold px-3 py-1.5 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed text-black transition-all hover:brightness-110"
+            style={{ backgroundColor: '#D4883A' }}
+          >
+            {isAdding ? 'Adding…' : 'Add'}
+          </button>
+          <button
+            onClick={() => {
+              setShowAddForm(false)
+              setNewClientName('')
+            }}
+            className="text-xs px-2 py-1.5 rounded-lg text-zinc-500 hover:text-zinc-300 transition-colors"
+          >
+            Cancel
+          </button>
         </div>
       )}
-
-      {/* Client list */}
-      <div className="divide-y divide-zinc-800/50">
-        {clients.length === 0 && !showAddForm && (
-          <div className="px-4 py-6 text-center">
-            <p className="text-zinc-600 text-xs">No clients yet.</p>
-            <button
-              onClick={() => setShowAddForm(true)}
-              className="mt-2 text-xs font-semibold transition-colors"
-              style={{ color: '#D4883A' }}
-            >
-              Add your first client →
-            </button>
-          </div>
-        )}
-
-        {clients.map(client => {
-          const isActive = client.id === activeClientId
-          const isDeleting = deletingId === client.id
-
-          return (
-            <div
-              key={client.id}
-              onClick={() => onSelect(client.id)}
-              className={`group flex items-center gap-3 px-4 py-3 cursor-pointer transition-colors ${
-                isActive
-                  ? 'bg-amber-900/20'
-                  : 'hover:bg-zinc-800/50'
-              }`}
-            >
-              {/* Active indicator */}
-              <div
-                className={`w-1.5 h-1.5 rounded-full shrink-0 transition-colors ${
-                  isActive ? 'bg-amber-500' : 'bg-zinc-700 group-hover:bg-zinc-500'
-                }`}
-              />
-
-              {/* Name + status */}
-              <div className="flex-1 min-w-0">
-                <p
-                  className={`text-sm font-medium truncate ${
-                    isActive ? 'text-amber-400' : 'text-zinc-300'
-                  }`}
-                >
-                  {client.name}
-                </p>
-                <p className="text-xs mt-0.5">
-                  {client.qbo_realm_id ? (
-                    <span className="text-emerald-500">QBO connected</span>
-                  ) : (
-                    <span className="text-zinc-600">No QBO connection</span>
-                  )}
-                </p>
-              </div>
-
-              {/* Delete */}
-              <button
-                onClick={e => handleDelete(client.id, e)}
-                disabled={isDeleting}
-                className="opacity-0 group-hover:opacity-100 transition-opacity text-zinc-600 hover:text-red-400 disabled:opacity-30 text-xs px-1"
-                title="Delete client"
-              >
-                {isDeleting ? '…' : '✕'}
-              </button>
-            </div>
-          )
-        })}
-      </div>
     </div>
   )
 }

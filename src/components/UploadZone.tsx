@@ -163,8 +163,8 @@ export function UploadZone({ onUploadComplete, onError, disabled, clientId }: Up
               <div>
                 <h3 className="text-white font-semibold text-sm mb-1">Duplicate Document</h3>
                 <p className="text-zinc-400 text-sm leading-relaxed">
-                  <span className="text-zinc-200 font-medium">{duplicateDialog.filename}</span> has
-                  already been uploaded. Upload it again anyway?
+                  <span className="text-zinc-200 font-medium">{duplicateDialog.filename}</span> appears
+                  to already exist. If you deleted it and want to re-upload, click Upload Anyway.
                 </p>
               </div>
             </div>

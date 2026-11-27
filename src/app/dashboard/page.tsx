@@ -27,7 +27,8 @@ function DashboardContent() {
       setNotice(`✓ QuickBooks connected (Realm: ${realmParam})`)
     }
     if (errorParam) {
-      setError(`OAuth error: ${decodeURIComponent(errorParam)}`)
+      const detail = searchParams.get('detail')
+      setError(`OAuth error: ${decodeURIComponent(errorParam)}${detail ? ` — ${decodeURIComponent(detail)}` : ''}`)
     }
   }, [searchParams])
 
@@ -112,8 +113,8 @@ function DashboardContent() {
       <header className="border-b border-zinc-800 bg-zinc-900/50 backdrop-blur sticky top-0 z-20">
         <div className="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <span className="text-xl font-bold tracking-tight">
-              <span className="text-indigo-400">Z</span>ABON
+            <span className="text-xl font-black tracking-tight">
+              z<span style={{color:'#D4883A'}}>a</span><span style={{color:'#2BAE8E'}}>b</span>on
             </span>
             <span className="text-zinc-700 text-xs">AI Bookkeeper</span>
           </div>
@@ -126,7 +127,8 @@ function DashboardContent() {
             ) : (
               <a
                 href="/api/auth/quickbooks"
-                className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium rounded-lg transition-colors"
+                className="flex items-center gap-2 px-4 py-2 text-black text-sm font-semibold rounded-lg transition-all hover:brightness-110 active:scale-95"
+                style={{backgroundColor:'#D4883A'}}
               >
                 Connect QuickBooks
               </a>
@@ -199,7 +201,8 @@ function DashboardContent() {
                     handlePush(approvedIds)
                   }}
                   disabled={isPushing || !qboConnected}
-                  className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-medium rounded-lg transition-colors"
+                  className="flex items-center gap-2 px-4 py-2 disabled:opacity-50 disabled:cursor-not-allowed text-black text-sm font-semibold rounded-lg transition-all hover:brightness-110 active:scale-95"
+                  style={{backgroundColor:'#D4883A'}}
                 >
                   {isPushing ? (
                     <>

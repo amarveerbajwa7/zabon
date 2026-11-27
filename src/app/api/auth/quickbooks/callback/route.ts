@@ -96,9 +96,10 @@ export async function GET(request: NextRequest) {
 
     return response
   } catch (err) {
+    const msg = err instanceof Error ? encodeURIComponent(err.message) : 'unknown'
     console.error('OAuth callback error:', err)
     return NextResponse.redirect(
-      new URL('/dashboard?error=unexpected', request.url)
+      new URL(`/dashboard?error=unexpected&detail=${msg}`, request.url)
     )
   }
 }

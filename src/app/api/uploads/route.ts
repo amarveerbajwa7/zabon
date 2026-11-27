@@ -28,14 +28,15 @@ export async function GET(request: NextRequest) {
   const userId = getUserId(request)
   const supabase = getSupabaseClient()
 
+  const clientId = request.nextUrl.searchParams.get('client_id')
+
   let query = supabase
     .from('uploads')
     .select('id, filename, row_count, status, created_at')
     .order('created_at', { ascending: false })
 
-  if (userId) {
-    query = query.eq('user_id', userId)
-  }
+  if (userId) query = query.eq('user_id', userId)
+  if (clientId) query = query.eq('client_id', clientId)
 
   const { data, error } = await query
 

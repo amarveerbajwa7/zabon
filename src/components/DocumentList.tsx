@@ -16,6 +16,7 @@ interface DocumentListProps {
   onSelect: (id: string) => void
   onDelete: (id: string) => void
   refreshTrigger?: number
+  clientId?: string | null
 }
 
 function StatusBadge({ status }: { status: string }) {
@@ -54,7 +55,7 @@ function formatDate(isoString: string): string {
   })
 }
 
-export function DocumentList({ selectedId, onSelect, onDelete, refreshTrigger }: DocumentListProps) {
+export function DocumentList({ selectedId, onSelect, onDelete, refreshTrigger, clientId }: DocumentListProps) {
   const [uploads, setUploads] = useState<UploadRecord[]>([])
   const [loading, setLoading] = useState(false)
   const [deletingId, setDeletingId] = useState<string | null>(null)
@@ -66,7 +67,8 @@ export function DocumentList({ selectedId, onSelect, onDelete, refreshTrigger }:
       const { data: { session } } = await supabase.auth.getSession()
       const headers: Record<string, string> = {}
       if (session?.access_token) headers['Authorization'] = `Bearer ${session.access_token}`
-      const res = await fetch('/api/uploads', { headers })
+      const url = clientId ? `/api/uploads?client_id=${clientId}` : '/api/uploads'
+      const res = await fetch(url, { headers })
       if (res.ok) {
         const data = await res.json()
         setUploads(data.uploads ?? [])

@@ -384,6 +384,7 @@ function DashboardContent() {
                 onSelect={handleDocumentSelect}
                 onDelete={handleDocumentDelete}
                 refreshTrigger={uploadsRefresh}
+                clientId={activeClientId}
               />
             )}
           </div>

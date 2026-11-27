@@ -15,8 +15,9 @@ export function UploadZone({ onUploadComplete, onError, disabled }: UploadZonePr
 
   const handleFile = useCallback(
     async (file: File) => {
-      if (!file.name.toLowerCase().endsWith('.csv')) {
-        onError('Only CSV files are supported. Please export your statement as CSV.')
+      const name = file.name.toLowerCase()
+      if (!name.endsWith('.csv') && !name.endsWith('.pdf')) {
+        onError('Only CSV and PDF files are supported. Please upload a bank statement export.')
         return
       }
 
@@ -103,7 +104,7 @@ export function UploadZone({ onUploadComplete, onError, disabled }: UploadZonePr
     >
       <input
         type="file"
-        accept=".csv"
+        accept=".csv,.pdf"
         onChange={onInputChange}
         disabled={disabled || isUploading}
         className="absolute inset-0 w-full h-full opacity-0 cursor-pointer disabled:cursor-not-allowed"
@@ -130,7 +131,7 @@ export function UploadZone({ onUploadComplete, onError, disabled }: UploadZonePr
             or <span className="text-indigo-400 underline">browse files</span>
           </p>
           <p className="text-zinc-600 text-xs mt-3">
-            Supports RBC bank & credit card CSV exports
+            Supports CSV and PDF from any bank or credit card
           </p>
         </>
       )}

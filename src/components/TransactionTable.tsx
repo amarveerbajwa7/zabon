@@ -296,17 +296,28 @@ export function TransactionTable({
                     <td className="p-3">
                       {tx.ai_confidence !== null ? (
                         <div className="relative">
-                          <span
-                            onMouseEnter={() => setTooltipId(tx.id)}
-                            onMouseLeave={() => setTooltipId(null)}
-                            className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium cursor-help ${getConfidenceBadgeClass(tx.ai_confidence, threshold)}`}
-                          >
-                            {tx.ai_confidence}%
-                          </span>
-                          {tooltipId === tx.id && tx.ai_reasoning && (
-                            <div className="absolute z-10 left-0 top-6 w-56 p-2 bg-zinc-800 border border-zinc-700 rounded-lg text-xs text-zinc-300 shadow-xl">
-                              {tx.ai_reasoning}
-                            </div>
+                          {tx.ai_reasoning === 'Matched from your categorization history' ? (
+                            <span
+                              className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${getConfidenceBadgeClass(tx.ai_confidence, threshold)}`}
+                              title="Matched from your categorization history"
+                            >
+                              🧠 {tx.ai_confidence}%
+                            </span>
+                          ) : (
+                            <>
+                              <span
+                                onMouseEnter={() => setTooltipId(tx.id)}
+                                onMouseLeave={() => setTooltipId(null)}
+                                className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium cursor-help ${getConfidenceBadgeClass(tx.ai_confidence, threshold)}`}
+                              >
+                                {tx.ai_confidence}%
+                              </span>
+                              {tooltipId === tx.id && tx.ai_reasoning && (
+                                <div className="absolute z-10 left-0 top-6 w-56 p-2 bg-zinc-800 border border-zinc-700 rounded-lg text-xs text-zinc-300 shadow-xl">
+                                  {tx.ai_reasoning}
+                                </div>
+                              )}
+                            </>
                           )}
                         </div>
                       ) : (

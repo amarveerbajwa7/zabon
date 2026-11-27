@@ -45,9 +45,15 @@ export async function GET(request: NextRequest) {
     )
   }
 
-  // Encode user_id into state so the callback can retrieve it
+  // Also accept client_id from query param
+  const clientIdFromQuery = searchParams.get('client_id')
+
+  // Encode user_id and client_id into state so the callback can retrieve them
+  // Format: "nonce:userId:clientId" (clientId may be empty string)
   const nonce = crypto.randomUUID()
-  const state = userId ? `${nonce}:${userId}` : nonce
+  const state = userId
+    ? `${nonce}:${userId}:${clientIdFromQuery ?? ''}`
+    : nonce
 
   const params = new URLSearchParams({
     client_id: clientId,

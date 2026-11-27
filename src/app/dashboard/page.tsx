@@ -6,11 +6,13 @@ import { createBrowserClient } from '@/lib/supabase'
 import { UploadZone } from '@/components/UploadZone'
 import { TransactionTable, Transaction, QBOAccount } from '@/components/TransactionTable'
 import { DocumentList } from '@/components/DocumentList'
+import { ClientSwitcher, Client } from '@/components/ClientSwitcher'
 
 function DashboardContent() {
   const searchParams = useSearchParams()
   const router = useRouter()
   const [userId, setUserId] = useState<string | null>(null)
+  const [accessToken, setAccessToken] = useState<string | null>(null)
   const [selectedUploadId, setSelectedUploadId] = useState<string | null>(null)
   const [transactions, setTransactions] = useState<Transaction[]>([])
   const [error, setError] = useState<string | null>(null)
@@ -22,6 +24,12 @@ function DashboardContent() {
   const [uploadsRefresh, setUploadsRefresh] = useState(0)
   const [qboAccounts, setQboAccounts] = useState<QBOAccount[]>([])
 
+  // Multi-client state
+  const [clients, setClients] = useState<Client[]>([])
+  const [activeClientId, setActiveClientId] = useState<string | null>(null)
+
+  const activeClient = clients.find(c => c.id === activeClientId) ?? null
+
   // Check auth session on mount
   useEffect(() => {
     const supabase = createBrowserClient()
@@ -31,8 +39,32 @@ function DashboardContent() {
         return
       }
       setUserId(session.user.id)
+      setAccessToken(session.access_token)
     })
   }, [router])
+
+  // Fetch clients once we have an access token
+  const fetchClients = useCallback(async (token: string) => {
+    try {
+      const res = await fetch('/api/clients', {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      if (!res.ok) return
+      const data = await res.json()
+      const list: Client[] = data.clients ?? []
+      setClients(list)
+      // Default to first client
+      if (list.length > 0) {
+        setActiveClientId(prev => prev ?? list[0].id)
+      }
+    } catch (err) {
+      console.warn('Could not fetch clients:', err)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (accessToken) fetchClients(accessToken)
+  }, [accessToken, fetchClients])
 
   // Parse URL params from OAuth callback
   useEffect(() => {
@@ -44,7 +76,13 @@ function DashboardContent() {
       setQboConnected(true)
       setRealmId(realmParam)
       setNotice(`✓ QuickBooks connected (Realm: ${realmParam})`)
-      // Immediately fetch accounts so the category dropdown is populated
+      // If a client_id came back, associate realm with active client in local state
+      const clientIdParam = searchParams.get('client_id')
+      if (clientIdParam) {
+        setClients(prev =>
+          prev.map(c => (c.id === clientIdParam ? { ...c, qbo_realm_id: realmParam } : c))
+        )
+      }
       fetch(`/api/qbo/accounts?realm_id=${realmParam}`)
         .then(r => r.json())
         .then(data => {
@@ -165,6 +203,65 @@ function DashboardContent() {
     [realmId, selectedUploadId, fetchTransactions]
   )
 
+  // Client management handlers
+  const handleClientSelect = useCallback(
+    (id: string) => {
+      setActiveClientId(id)
+      // Clear document selection when switching clients
+      setSelectedUploadId(null)
+      setTransactions([])
+      setUploadsRefresh(r => r + 1)
+    },
+    []
+  )
+
+  const handleClientAdd = useCallback(
+    async (name: string) => {
+      if (!accessToken) return
+      const res = await fetch('/api/clients', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({ name }),
+      })
+      if (!res.ok) {
+        const data = await res.json()
+        setError(data.error ?? 'Failed to create client')
+        return
+      }
+      const data = await res.json()
+      const newClient: Client = data.client
+      setClients(prev => [...prev, newClient])
+      setActiveClientId(newClient.id)
+    },
+    [accessToken]
+  )
+
+  const handleClientDelete = useCallback(
+    async (id: string) => {
+      if (!accessToken) return
+      const res = await fetch(`/api/clients/${id}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${accessToken}` },
+      })
+      if (!res.ok) {
+        const data = await res.json()
+        setError(data.error ?? 'Failed to delete client')
+        return
+      }
+      setClients(prev => prev.filter(c => c.id !== id))
+      if (activeClientId === id) {
+        const remaining = clients.filter(c => c.id !== id)
+        setActiveClientId(remaining.length > 0 ? remaining[0].id : null)
+        setSelectedUploadId(null)
+        setTransactions([])
+      }
+    },
+    [accessToken, activeClientId, clients]
+  )
+
   const stats = {
     total: transactions.length,
     pending: transactions.filter(t => t.status === 'pending' || t.status === 'categorized').length,
@@ -178,6 +275,9 @@ function DashboardContent() {
       .reduce((sum, t) => sum + t.amount, 0),
   }
 
+  // Build QBO connect URL with active client_id
+  const qboConnectUrl = `/api/auth/quickbooks?user_id=${userId ?? ''}${activeClientId ? `&client_id=${activeClientId}` : ''}`
+
   return (
     <div className="min-h-screen bg-zinc-950 text-white">
       {/* Header */}
@@ -189,6 +289,12 @@ function DashboardContent() {
               <span style={{ color: '#2BAE8E' }}>b</span>on
             </span>
             <span className="text-zinc-700 text-xs">AI Bookkeeper</span>
+            {activeClient && (
+              <>
+                <span className="text-zinc-700">·</span>
+                <span className="text-zinc-400 text-sm font-medium">{activeClient.name}</span>
+              </>
+            )}
           </div>
           <div className="flex items-center gap-3">
             <button
@@ -204,7 +310,7 @@ function DashboardContent() {
               </span>
             ) : (
               <a
-                href={`/api/auth/quickbooks${userId ? `?user_id=${userId}` : ''}`}
+                href={qboConnectUrl}
                 className="flex items-center gap-2 px-4 py-2 text-black text-sm font-semibold rounded-lg transition-all hover:brightness-110 active:scale-95"
                 style={{ backgroundColor: '#D4883A' }}
               >
@@ -262,108 +368,130 @@ function DashboardContent() {
 
         {/* Main 2-column layout */}
         <div className="flex gap-6 items-start">
-          {/* Left sidebar — Document list */}
+          {/* Left sidebar — Client switcher + Document list */}
           <div className="w-72 shrink-0 space-y-4">
-            <DocumentList
-              selectedId={selectedUploadId}
-              onSelect={handleDocumentSelect}
-              onDelete={handleDocumentDelete}
-              refreshTrigger={uploadsRefresh}
+            <ClientSwitcher
+              clients={clients}
+              activeClientId={activeClientId}
+              onSelect={handleClientSelect}
+              onAdd={handleClientAdd}
+              onDelete={handleClientDelete}
             />
+
+            {activeClientId && (
+              <DocumentList
+                selectedId={selectedUploadId}
+                onSelect={handleDocumentSelect}
+                onDelete={handleDocumentDelete}
+                refreshTrigger={uploadsRefresh}
+              />
+            )}
           </div>
 
           {/* Right column — Upload + Transactions */}
           <div className="flex-1 min-w-0 space-y-6">
-            {/* Upload zone */}
-            <section>
-              <h2 className="text-zinc-400 text-xs font-semibold uppercase tracking-widest mb-3">
-                Upload Statement
-              </h2>
-              <UploadZone
-                onUploadComplete={handleUploadComplete}
-                onError={setError}
-                disabled={false}
-              />
-            </section>
+            {/* No client selected / no clients */}
+            {!activeClientId && clients.length === 0 && (
+              <div className="text-center py-24 text-zinc-700">
+                <p className="text-lg">Welcome to ZABON.</p>
+                <p className="text-sm mt-2">Add your first client using the panel on the left to get started.</p>
+              </div>
+            )}
 
-            {/* Transaction table */}
-            {transactions.length > 0 && (
-              <section>
-                {/* Table header row */}
-                <div className="flex items-center gap-4 mb-3 flex-wrap">
-                  <h2 className="text-zinc-400 text-xs font-semibold uppercase tracking-widest">
-                    Review Transactions
+            {activeClientId && (
+              <>
+                {/* Upload zone */}
+                <section>
+                  <h2 className="text-zinc-400 text-xs font-semibold uppercase tracking-widest mb-3">
+                    Upload Statement
                   </h2>
+                  <UploadZone
+                    onUploadComplete={handleUploadComplete}
+                    onError={setError}
+                    disabled={false}
+                    clientId={activeClientId}
+                  />
+                </section>
 
-                  {/* Threshold slider */}
-                  <div className="flex items-center gap-2 ml-auto">
-                    <label className="text-zinc-500 text-xs whitespace-nowrap">
-                      Flag below:{' '}
-                      <span className={threshold <= 70 ? 'text-red-400' : threshold <= 85 ? 'text-amber-400' : 'text-zinc-300'}>
-                        {threshold}%
-                      </span>
-                    </label>
-                    <input
-                      type="range"
-                      min={50}
-                      max={100}
-                      step={1}
-                      value={threshold}
-                      onChange={e => setThreshold(Number(e.target.value))}
-                      className="w-24 h-1.5 rounded-full appearance-none cursor-pointer"
-                      style={{ accentColor: '#D4883A' }}
-                    />
-                  </div>
+                {/* Transaction table */}
+                {transactions.length > 0 && (
+                  <section>
+                    <div className="flex items-center gap-4 mb-3 flex-wrap">
+                      <h2 className="text-zinc-400 text-xs font-semibold uppercase tracking-widest">
+                        Review Transactions
+                      </h2>
 
-                  {/* Push button */}
-                  {stats.approved > 0 && (
-                    <button
-                      onClick={() => {
-                        const approvedIds = transactions
-                          .filter(t => t.status === 'approved')
-                          .map(t => t.id)
-                        handlePush(approvedIds)
-                      }}
-                      disabled={isPushing || !qboConnected}
-                      className="flex items-center gap-2 px-4 py-2 disabled:opacity-50 disabled:cursor-not-allowed text-black text-sm font-semibold rounded-lg transition-all hover:brightness-110 active:scale-95"
-                      style={{ backgroundColor: '#D4883A' }}
-                    >
-                      {isPushing ? (
-                        <>
-                          <span className="w-3 h-3 border border-white border-t-transparent rounded-full animate-spin" />
-                          Pushing…
-                        </>
-                      ) : (
-                        `→ Push ${stats.approved} to QuickBooks`
+                      {/* Threshold slider */}
+                      <div className="flex items-center gap-2 ml-auto">
+                        <label className="text-zinc-500 text-xs whitespace-nowrap">
+                          Flag below:{' '}
+                          <span className={threshold <= 70 ? 'text-red-400' : threshold <= 85 ? 'text-amber-400' : 'text-zinc-300'}>
+                            {threshold}%
+                          </span>
+                        </label>
+                        <input
+                          type="range"
+                          min={50}
+                          max={100}
+                          step={1}
+                          value={threshold}
+                          onChange={e => setThreshold(Number(e.target.value))}
+                          className="w-24 h-1.5 rounded-full appearance-none cursor-pointer"
+                          style={{ accentColor: '#D4883A' }}
+                        />
+                      </div>
+
+                      {/* Push button */}
+                      {stats.approved > 0 && (
+                        <button
+                          onClick={() => {
+                            const approvedIds = transactions
+                              .filter(t => t.status === 'approved')
+                              .map(t => t.id)
+                            handlePush(approvedIds)
+                          }}
+                          disabled={isPushing || !qboConnected}
+                          className="flex items-center gap-2 px-4 py-2 disabled:opacity-50 disabled:cursor-not-allowed text-black text-sm font-semibold rounded-lg transition-all hover:brightness-110 active:scale-95"
+                          style={{ backgroundColor: '#D4883A' }}
+                        >
+                          {isPushing ? (
+                            <>
+                              <span className="w-3 h-3 border border-white border-t-transparent rounded-full animate-spin" />
+                              Pushing…
+                            </>
+                          ) : (
+                            `→ Push ${stats.approved} to QuickBooks`
+                          )}
+                        </button>
                       )}
-                    </button>
-                  )}
-                </div>
+                    </div>
 
-                <TransactionTable
-                  transactions={transactions}
-                  onApprove={handleApprove}
-                  onReject={handleReject}
-                  onCategoryChange={handleCategoryChange}
-                  onPush={handlePush}
-                  isPushing={isPushing}
-                  threshold={threshold}
-                  qboAccounts={qboAccounts}
-                />
-              </section>
-            )}
+                    <TransactionTable
+                      transactions={transactions}
+                      onApprove={handleApprove}
+                      onReject={handleReject}
+                      onCategoryChange={handleCategoryChange}
+                      onPush={handlePush}
+                      isPushing={isPushing}
+                      threshold={threshold}
+                      qboAccounts={qboAccounts}
+                    />
+                  </section>
+                )}
 
-            {!transactions.length && !selectedUploadId && (
-              <div className="text-center py-16 text-zinc-700">
-                <p className="text-lg">Upload a bank or credit card statement to get started.</p>
-                <p className="text-sm mt-2">AI will categorize your transactions instantly.</p>
-              </div>
-            )}
+                {!transactions.length && !selectedUploadId && (
+                  <div className="text-center py-16 text-zinc-700">
+                    <p className="text-lg">Upload a bank or credit card statement to get started.</p>
+                    <p className="text-sm mt-2">AI will categorize your transactions instantly.</p>
+                  </div>
+                )}
 
-            {!transactions.length && selectedUploadId && (
-              <div className="text-center py-16 text-zinc-700">
-                <p className="text-lg">No transactions found for this document.</p>
-              </div>
+                {!transactions.length && selectedUploadId && (
+                  <div className="text-center py-16 text-zinc-700">
+                    <p className="text-lg">No transactions found for this document.</p>
+                  </div>
+                )}
+              </>
             )}
           </div>
         </div>

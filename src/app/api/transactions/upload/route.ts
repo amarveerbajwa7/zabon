@@ -269,6 +269,7 @@ export async function POST(request: NextRequest) {
     const formData = await request.formData()
     const file = formData.get('file') as File | null
     const uploadId = (formData.get('upload_id') as string) || crypto.randomUUID()
+    const clientId = (formData.get('client_id') as string) || null
 
     const force = formData.get('force') === 'true'
 
@@ -355,6 +356,7 @@ export async function POST(request: NextRequest) {
         row_count: transactions.length,
         status: 'parsed',
         user_id: userId,
+        ...(clientId ? { client_id: clientId } : {}),
       })
       .select()
       .single()

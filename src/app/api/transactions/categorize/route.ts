@@ -2,11 +2,13 @@ export const dynamic = 'force-dynamic'
 
 import { NextRequest, NextResponse } from 'next/server'
 import OpenAI from 'openai'
+import { jwtDecode } from 'jwt-decode'
 import { createClient } from '@supabase/supabase-js'
 import {
   getValidAccessToken,
   fetchQBOAccounts,
 } from '@/lib/qbo'
+import { lookupRule } from '@/lib/learning'
 
 const FALLBACK_CHART_OF_ACCOUNTS = [
   'Revenue',
@@ -80,6 +82,19 @@ Respond ONLY with a valid JSON array matching this structure:
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
+    // Extract user_id from Authorization JWT for learning agent
+    let userId: string | null = null
+    const authHeader = request.headers.get('Authorization')
+    if (authHeader?.startsWith('Bearer ')) {
+      try {
+        const token = authHeader.slice(7)
+        const decoded = jwtDecode<{ sub?: string }>(token)
+        userId = decoded.sub ?? null
+      } catch {
+        // no-op — learning agent degrades gracefully without user_id
+      }
+    }
+
     const { upload_id, transaction_ids, realm_id } = body as {
       upload_id?: string
       transaction_ids?: string[]
@@ -158,8 +173,39 @@ export async function POST(request: NextRequest) {
     let categorizedCount = 0
     const results: CategorizedTransaction[] = []
 
-    for (let i = 0; i < transactions.length; i += BATCH_SIZE) {
-      const batch = transactions.slice(i, i + BATCH_SIZE)
+    // --- Learning agent: resolve rules before hitting GPT ---
+    const ruleMatched: Set<string> = new Set()
+    if (userId) {
+      for (const tx of transactions) {
+        const rule = await lookupRule(supabase, userId, tx.description)
+        if (rule) {
+          ruleMatched.add(tx.id)
+          const learned: CategorizedTransaction = {
+            ...tx,
+            suggested_category: rule.category as AccountCategory,
+            confidence: rule.confidence,
+            reasoning: 'Matched from your categorization history',
+          }
+          results.push(learned)
+          await supabase
+            .from('transactions')
+            .update({
+              suggested_category: rule.category,
+              ai_confidence: rule.confidence,
+              ai_reasoning: 'Matched from your categorization history',
+              status: 'categorized',
+            })
+            .eq('id', tx.id)
+          categorizedCount++
+        }
+      }
+    }
+
+    // Filter out already-handled transactions before GPT batching
+    const remainingTransactions = transactions.filter(tx => !ruleMatched.has(tx.id))
+
+    for (let i = 0; i < remainingTransactions.length; i += BATCH_SIZE) {
+      const batch = remainingTransactions.slice(i, i + BATCH_SIZE)
 
       const userContent = JSON.stringify(
         batch.map(tx => ({

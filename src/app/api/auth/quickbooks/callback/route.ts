@@ -31,15 +31,17 @@ export async function GET(request: NextRequest) {
     )
   }
 
-  // Extract user_id from state param (format: "nonce:userId" or just "nonce")
+  // Extract user_id and client_id from state param
+  // Format: "nonce:userId:clientId" or "nonce:userId" or "nonce"
   const stateParts = state.split(':')
-  const userId = stateParts.length >= 2 ? stateParts[stateParts.length - 1] : null
+  const userId = stateParts.length >= 2 ? stateParts[1] : null
+  const clientId = stateParts.length >= 3 && stateParts[2] ? stateParts[2] : null
 
-  const clientId = process.env.QBO_CLIENT_ID!
+  const qboClientId = process.env.QBO_CLIENT_ID!
   const clientSecret = process.env.QBO_CLIENT_SECRET!
   const redirectUri = process.env.QBO_REDIRECT_URI!
 
-  const basicAuth = Buffer.from(`${clientId}:${clientSecret}`).toString('base64')
+  const basicAuth = Buffer.from(`${qboClientId}:${clientSecret}`).toString('base64')
 
   try {
     const tokenRes = await fetch(TOKEN_URL, {
@@ -83,6 +85,7 @@ export async function GET(request: NextRequest) {
           refresh_expires_at: refreshExpiresAt,
           updated_at: new Date().toISOString(),
           ...(userId ? { user_id: userId } : {}),
+          ...(clientId ? { client_id: clientId } : {}),
         },
         { onConflict: 'realm_id' }
       )
@@ -94,9 +97,9 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    const response = NextResponse.redirect(
-      new URL(`/dashboard?connected=true&realmId=${realmId}`, request.url)
-    )
+    const redirectUrl = new URL(`/dashboard?connected=true&realmId=${realmId}`, request.url)
+    if (clientId) redirectUrl.searchParams.set('client_id', clientId)
+    const response = NextResponse.redirect(redirectUrl)
     response.cookies.delete('qbo_state')
 
     return response

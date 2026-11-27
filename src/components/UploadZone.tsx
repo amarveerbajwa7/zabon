@@ -7,6 +7,7 @@ interface UploadZoneProps {
   onUploadComplete: (uploadId: string, count: number) => void
   onError: (message: string) => void
   disabled?: boolean
+  clientId?: string | null
 }
 
 interface DuplicateDialog {
@@ -15,7 +16,7 @@ interface DuplicateDialog {
   onCancel: () => void
 }
 
-export function UploadZone({ onUploadComplete, onError, disabled }: UploadZoneProps) {
+export function UploadZone({ onUploadComplete, onError, disabled, clientId }: UploadZoneProps) {
   const [isDragging, setIsDragging] = useState(false)
   const [isUploading, setIsUploading] = useState(false)
   const [progress, setProgress] = useState<string | null>(null)
@@ -30,6 +31,7 @@ export function UploadZone({ onUploadComplete, onError, disabled }: UploadZonePr
       const formData = new FormData()
       formData.append('file', file)
       if (force) formData.append('force', 'true')
+      if (clientId) formData.append('client_id', clientId)
 
       const supabase = createBrowserClient()
       const { data: { session } } = await supabase.auth.getSession()

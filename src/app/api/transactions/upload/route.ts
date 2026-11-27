@@ -237,6 +237,8 @@ export async function POST(request: NextRequest) {
     const file = formData.get('file') as File | null
     const uploadId = (formData.get('upload_id') as string) || crypto.randomUUID()
 
+    const force = formData.get('force') === 'true'
+
     if (!file) {
       return NextResponse.json({ error: 'No file provided' }, { status: 400 })
     }
@@ -293,6 +295,22 @@ export async function POST(request: NextRequest) {
     }
 
     const supabase = getSupabaseClient()
+
+    // ─── Duplicate detection ───────────────────────────────────────────────────
+    if (!force) {
+      const { data: existing } = await supabase
+        .from('uploads')
+        .select('id, filename')
+        .eq('filename', file.name)
+        .maybeSingle()
+
+      if (existing) {
+        return NextResponse.json(
+          { duplicate: true, existing_upload_id: existing.id, filename: existing.filename },
+          { status: 409 }
+        )
+      }
+    }
 
     // Store the upload record
     const { data: uploadRecord, error: uploadError } = await supabase

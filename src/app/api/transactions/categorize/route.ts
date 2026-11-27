@@ -31,7 +31,7 @@ interface Transaction {
 
 interface CategorizedTransaction extends Transaction {
   suggested_category: AccountCategory
-  confidence: 'high' | 'medium' | 'low'
+  confidence: number  // 0–100
   reasoning: string
 }
 
@@ -63,7 +63,7 @@ Respond ONLY with a valid JSON array matching this structure:
   {
     "id": "<transaction_id>",
     "suggested_category": "<exact category name>",
-    "confidence": "high" | "medium" | "low",
+    "confidence": <integer 0–100 — your certainty in this categorization (0=no idea, 100=absolutely certain)>,
     "reasoning": "<one sentence explanation>"
   }
 ]`
@@ -110,6 +110,7 @@ export async function POST(request: NextRequest) {
 
     // Batch in chunks of 50 to stay within token limits
     const BATCH_SIZE = 50
+    let categorizedCount = 0
     const results: CategorizedTransaction[] = []
 
     for (let i = 0; i < transactions.length; i += BATCH_SIZE) {
@@ -153,16 +154,28 @@ export async function POST(request: NextRequest) {
 
       // Update Supabase with suggestions
       for (const item of categorized) {
+        const confidence = typeof item.confidence === 'number'
+          ? Math.min(100, Math.max(0, item.confidence))
+          : null
         await supabase
           .from('transactions')
           .update({
             suggested_category: item.suggested_category,
-            ai_confidence: item.confidence,
+            ai_confidence: confidence,
             ai_reasoning: item.reasoning,
             status: 'categorized',
           })
           .eq('id', item.id)
+        categorizedCount++
       }
+    }
+
+    // Mark upload as done
+    if (upload_id) {
+      await supabase
+        .from('uploads')
+        .update({ status: 'done' })
+        .eq('id', upload_id)
     }
 
     return NextResponse.json({

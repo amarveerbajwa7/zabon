@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useState } from 'react'
+import { createBrowserClient } from '@/lib/supabase'
 
 interface UploadZoneProps {
   onUploadComplete: (uploadId: string, count: number) => void
@@ -30,9 +31,14 @@ export function UploadZone({ onUploadComplete, onError, disabled }: UploadZonePr
       formData.append('file', file)
       if (force) formData.append('force', 'true')
 
+      const supabase = createBrowserClient()
+      const { data: { session } } = await supabase.auth.getSession()
       const uploadRes = await fetch('/api/transactions/upload', {
         method: 'POST',
         body: formData,
+        headers: session?.access_token
+          ? { Authorization: `Bearer ${session.access_token}` }
+          : {},
       })
 
       const uploadData = await uploadRes.json()

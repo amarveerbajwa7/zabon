@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import OpenAI from 'openai'
+import { jwtDecode } from 'jwt-decode'
 
 export interface ParsedTransaction {
   date: string
@@ -229,10 +230,40 @@ ${truncatedText}`,
   }))
 }
 
+// ─── Auth helper ─────────────────────────────────────────────────────────────
+
+function getUserIdFromRequest(request: NextRequest): string | null {
+  try {
+    // Try Authorization header first
+    const authHeader = request.headers.get('authorization')
+    if (authHeader?.startsWith('Bearer ')) {
+      const token = authHeader.slice(7)
+      const decoded = jwtDecode<{ sub?: string }>(token)
+      return decoded.sub ?? null
+    }
+    // Fall back to cookie
+    const cookieToken =
+      request.cookies.get('sb-access-token')?.value ||
+      [...request.cookies.getAll()].find(c => c.name.includes('-auth-token'))?.value
+    if (cookieToken) {
+      const decoded = jwtDecode<{ sub?: string }>(cookieToken)
+      return decoded.sub ?? null
+    }
+  } catch {
+    // Invalid token
+  }
+  return null
+}
+
 // ─── Route handler ────────────────────────────────────────────────────────────
 
 export async function POST(request: NextRequest) {
   try {
+    const userId = getUserIdFromRequest(request)
+    if (!userId) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
     const formData = await request.formData()
     const file = formData.get('file') as File | null
     const uploadId = (formData.get('upload_id') as string) || crypto.randomUUID()
@@ -302,6 +333,7 @@ export async function POST(request: NextRequest) {
         .from('uploads')
         .select('id, filename')
         .eq('filename', file.name)
+        .eq('user_id', userId)
         .maybeSingle()
 
       if (existing) {
@@ -320,6 +352,7 @@ export async function POST(request: NextRequest) {
         filename: file.name,
         row_count: transactions.length,
         status: 'parsed',
+        user_id: userId,
       })
       .select()
       .single()

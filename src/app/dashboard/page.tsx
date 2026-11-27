@@ -1,13 +1,16 @@
 'use client'
 
 import { useEffect, useState, useCallback, Suspense } from 'react'
-import { useSearchParams } from 'next/navigation'
+import { useSearchParams, useRouter } from 'next/navigation'
+import { createBrowserClient } from '@/lib/supabase'
 import { UploadZone } from '@/components/UploadZone'
 import { TransactionTable, Transaction, QBOAccount } from '@/components/TransactionTable'
 import { DocumentList } from '@/components/DocumentList'
 
 function DashboardContent() {
   const searchParams = useSearchParams()
+  const router = useRouter()
+  const [userId, setUserId] = useState<string | null>(null)
   const [selectedUploadId, setSelectedUploadId] = useState<string | null>(null)
   const [transactions, setTransactions] = useState<Transaction[]>([])
   const [error, setError] = useState<string | null>(null)
@@ -18,6 +21,18 @@ function DashboardContent() {
   const [threshold, setThreshold] = useState(95)
   const [uploadsRefresh, setUploadsRefresh] = useState(0)
   const [qboAccounts, setQboAccounts] = useState<QBOAccount[]>([])
+
+  // Check auth session on mount
+  useEffect(() => {
+    const supabase = createBrowserClient()
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (!session) {
+        router.push('/login')
+        return
+      }
+      setUserId(session.user.id)
+    })
+  }, [router])
 
   // Parse URL params from OAuth callback
   useEffect(() => {
@@ -52,6 +67,12 @@ function DashboardContent() {
       setTransactions(data.transactions || [])
     }
   }, [])
+
+  const handleSignOut = useCallback(async () => {
+    const supabase = createBrowserClient()
+    await supabase.auth.signOut()
+    router.push('/login')
+  }, [router])
 
   const handleUploadComplete = useCallback(
     (uid: string, count: number) => {
@@ -170,6 +191,12 @@ function DashboardContent() {
             <span className="text-zinc-700 text-xs">AI Bookkeeper</span>
           </div>
           <div className="flex items-center gap-3">
+            <button
+              onClick={handleSignOut}
+              className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors px-3 py-1.5 rounded-lg hover:bg-zinc-800"
+            >
+              Sign out
+            </button>
             {qboConnected ? (
               <span className="flex items-center gap-1.5 text-xs text-emerald-400 bg-emerald-900/30 border border-emerald-800/50 px-3 py-1.5 rounded-full">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
@@ -177,7 +204,7 @@ function DashboardContent() {
               </span>
             ) : (
               <a
-                href="/api/auth/quickbooks"
+                href={`/api/auth/quickbooks${userId ? `?user_id=${userId}` : ''}`}
                 className="flex items-center gap-2 px-4 py-2 text-black text-sm font-semibold rounded-lg transition-all hover:brightness-110 active:scale-95"
                 style={{ backgroundColor: '#D4883A' }}
               >

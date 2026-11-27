@@ -29,8 +29,9 @@ export async function GET(request: NextRequest) {
     )
   }
 
-  // State validation skipped for MVP (cookie doesn't survive serverless redirect)
-  // TODO: implement stateless PKCE or server-side session for production
+  // Extract user_id from state param (format: "nonce:userId" or just "nonce")
+  const stateParts = state.split(':')
+  const userId = stateParts.length >= 2 ? stateParts[stateParts.length - 1] : null
 
   const clientId = process.env.QBO_CLIENT_ID!
   const clientSecret = process.env.QBO_CLIENT_SECRET!
@@ -79,6 +80,7 @@ export async function GET(request: NextRequest) {
           expires_at: expiresAt,
           refresh_expires_at: refreshExpiresAt,
           updated_at: new Date().toISOString(),
+          ...(userId ? { user_id: userId } : {}),
         },
         { onConflict: 'realm_id' }
       )

@@ -86,7 +86,7 @@ export async function GET(request: NextRequest) {
     if (dbError) {
       console.error('Failed to store tokens:', dbError)
       return NextResponse.redirect(
-        new URL('/dashboard?error=db_error', request.url)
+        new URL(`/dashboard?error=db_error&detail=${encodeURIComponent(dbError.message)}`, request.url)
       )
     }
 

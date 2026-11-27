@@ -4,7 +4,7 @@ import { createClient } from '@supabase/supabase-js'
 import {
   getValidAccessToken,
   fetchQBOAccounts,
-} from '@/app/api/qbo/accounts/route'
+} from '@/lib/qbo'
 
 const FALLBACK_CHART_OF_ACCOUNTS = [
   'Revenue',

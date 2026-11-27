@@ -4,7 +4,7 @@ import {
   getValidAccessToken,
   fetchQBOAccounts,
   QBOAccount,
-} from '@/app/api/qbo/accounts/route'
+} from '@/lib/qbo'
 
 const QBO_BASE_URL =
   process.env.QBO_ENVIRONMENT === 'production'

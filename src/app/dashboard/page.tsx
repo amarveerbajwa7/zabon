@@ -1,11 +1,11 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { UploadZone } from '@/components/UploadZone'
 import { TransactionTable, Transaction } from '@/components/TransactionTable'
 
-export default function DashboardPage() {
+function DashboardContent() {
   const searchParams = useSearchParams()
   const [uploadId, setUploadId] = useState<string | null>(null)
   const [transactions, setTransactions] = useState<Transaction[]>([])
@@ -231,5 +231,17 @@ export default function DashboardPage() {
         )}
       </main>
     </div>
+  )
+}
+
+export default function DashboardPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-zinc-950 flex items-center justify-center">
+        <div className="text-zinc-500">Loading...</div>
+      </div>
+    }>
+      <DashboardContent />
+    </Suspense>
   )
 }

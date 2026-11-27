@@ -1,8 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import OpenAI from 'openai'
 import { createClient } from '@supabase/supabase-js'
+import {
+  getValidAccessToken,
+  fetchQBOAccounts,
+} from '@/app/api/qbo/accounts/route'
 
-const CHART_OF_ACCOUNTS = [
+const FALLBACK_CHART_OF_ACCOUNTS = [
   'Revenue',
   'COGS',
   'Advertising & Marketing',
@@ -19,7 +23,7 @@ const CHART_OF_ACCOUNTS = [
   'Miscellaneous',
 ] as const
 
-export type AccountCategory = (typeof CHART_OF_ACCOUNTS)[number]
+export type AccountCategory = (typeof FALLBACK_CHART_OF_ACCOUNTS)[number]
 
 interface Transaction {
   id: string
@@ -41,39 +45,43 @@ function getSupabaseClient() {
   return createClient(url, key)
 }
 
-const SYSTEM_PROMPT = `You are an expert bookkeeper AI. You will receive a list of bank/credit card transactions and must categorize each one into the most appropriate account category.
+function buildSystemPrompt(accountNames: string[]): string {
+  const list = accountNames.map(c => `- ${c}`).join('\n')
+  return `You are an expert bookkeeper AI. You will receive a list of bank/credit card transactions and must categorize each one into the most appropriate account category.
 
-Chart of Accounts (use EXACTLY one of these):
-${CHART_OF_ACCOUNTS.map(c => `- ${c}`).join('\n')}
+Chart of Accounts (use EXACTLY one of these names, spelling must match exactly):
+${list}
 
 Rules:
-- Credits (money coming in) are almost always "Revenue" unless it's a refund
-- Bank fees, NSF fees, wire fees → "Bank Charges & Fees"
-- AWS, Vercel, GitHub, Figma, Notion, Slack, etc → "Software & Subscriptions"
-- Facebook Ads, Google Ads, marketing agencies → "Advertising & Marketing"
-- Restaurants, coffee shops, bars → "Meals & Entertainment"
-- Airlines, hotels, Airbnb, Uber/Lyft (travel context) → "Travel"
-- Payroll processors (Gusto, ADP, Wagepoint) → "Payroll & Wages"
-- Lawyers, accountants, consultants → "Professional Fees"
-- Rent, hydro, gas, internet → "Rent & Utilities"
-- If genuinely ambiguous → "Miscellaneous"
+- Credits (money coming in) should map to an Income account if one exists, otherwise best guess
+- Bank fees, NSF fees, wire fees → closest bank charges/fees account
+- AWS, Vercel, GitHub, Figma, Notion, Slack, etc → closest software/subscriptions account
+- Facebook Ads, Google Ads, marketing agencies → closest advertising account
+- Restaurants, coffee shops, bars → closest meals/entertainment account
+- Airlines, hotels, Airbnb, Uber/Lyft (travel context) → closest travel account
+- Payroll processors (Gusto, ADP, Wagepoint) → closest payroll account
+- Lawyers, accountants, consultants → closest professional fees account
+- Rent, hydro, gas, internet → closest rent/utilities account
+- If genuinely ambiguous → pick the most generic expense account available
 
 Respond ONLY with a valid JSON array matching this structure:
 [
   {
     "id": "<transaction_id>",
-    "suggested_category": "<exact category name>",
+    "suggested_category": "<exact account name from the list above>",
     "confidence": <integer 0–100 — your certainty in this categorization (0=no idea, 100=absolutely certain)>,
     "reasoning": "<one sentence explanation>"
   }
 ]`
+}
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { upload_id, transaction_ids } = body as {
+    const { upload_id, transaction_ids, realm_id } = body as {
       upload_id?: string
       transaction_ids?: string[]
+      realm_id?: string
     }
 
     if (!upload_id && !transaction_ids?.length) {
@@ -84,6 +92,41 @@ export async function POST(request: NextRequest) {
     }
 
     const supabase = getSupabaseClient()
+
+    // Try to fetch real QBO account names for better categorization
+    let accountNames: string[] = [...FALLBACK_CHART_OF_ACCOUNTS]
+    if (realm_id) {
+      try {
+        const accessToken = await getValidAccessToken(supabase, realm_id)
+        const qboAccounts = await fetchQBOAccounts(accessToken, realm_id)
+        if (qboAccounts.length > 0) {
+          accountNames = qboAccounts.map(a => a.name)
+        }
+      } catch (err) {
+        console.warn('Could not fetch QBO accounts for categorization, using fallback:', err)
+      }
+    } else {
+      // Try to get realm_id from the first active QBO connection
+      try {
+        const { data: conn } = await supabase
+          .from('qbo_connections')
+          .select('realm_id')
+          .order('updated_at', { ascending: false })
+          .limit(1)
+          .single()
+        if (conn?.realm_id) {
+          const accessToken = await getValidAccessToken(supabase, conn.realm_id)
+          const qboAccounts = await fetchQBOAccounts(accessToken, conn.realm_id)
+          if (qboAccounts.length > 0) {
+            accountNames = qboAccounts.map(a => a.name)
+          }
+        }
+      } catch (err) {
+        console.warn('Could not auto-detect QBO realm for categorization:', err)
+      }
+    }
+
+    const SYSTEM_PROMPT = buildSystemPrompt(accountNames)
 
     let query = supabase
       .from('transactions')

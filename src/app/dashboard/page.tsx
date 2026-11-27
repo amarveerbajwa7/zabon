@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { UploadZone } from '@/components/UploadZone'
-import { TransactionTable, Transaction } from '@/components/TransactionTable'
+import { TransactionTable, Transaction, QBOAccount } from '@/components/TransactionTable'
 import { DocumentList } from '@/components/DocumentList'
 
 function DashboardContent() {
@@ -17,6 +17,7 @@ function DashboardContent() {
   const [qboConnected, setQboConnected] = useState(false)
   const [threshold, setThreshold] = useState(95)
   const [uploadsRefresh, setUploadsRefresh] = useState(0)
+  const [qboAccounts, setQboAccounts] = useState<QBOAccount[]>([])
 
   // Parse URL params from OAuth callback
   useEffect(() => {
@@ -28,6 +29,13 @@ function DashboardContent() {
       setQboConnected(true)
       setRealmId(realmParam)
       setNotice(`✓ QuickBooks connected (Realm: ${realmParam})`)
+      // Immediately fetch accounts so the category dropdown is populated
+      fetch(`/api/qbo/accounts?realm_id=${realmParam}`)
+        .then(r => r.json())
+        .then(data => {
+          if (data.accounts?.length) setQboAccounts(data.accounts)
+        })
+        .catch(err => console.warn('Could not fetch QBO accounts:', err))
     }
     if (errorParam) {
       const detail = searchParams.get('detail')
@@ -313,6 +321,7 @@ function DashboardContent() {
                   onPush={handlePush}
                   isPushing={isPushing}
                   threshold={threshold}
+                  qboAccounts={qboAccounts}
                 />
               </section>
             )}

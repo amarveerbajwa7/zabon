@@ -1,9 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import {
+  getValidAccessToken,
+  fetchQBOAccounts,
+  QBOAccount,
+} from '@/app/api/qbo/accounts/route'
 
-const QBO_BASE_URL = process.env.QBO_ENVIRONMENT === 'production'
-  ? 'https://quickbooks.api.intuit.com'
-  : 'https://sandbox-quickbooks.api.intuit.com'
+const QBO_BASE_URL =
+  process.env.QBO_ENVIRONMENT === 'production'
+    ? 'https://quickbooks.api.intuit.com'
+    : 'https://sandbox-quickbooks.api.intuit.com'
 
 function getSupabaseClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL!
@@ -11,82 +17,46 @@ function getSupabaseClient() {
   return createClient(url, key)
 }
 
-async function getValidAccessToken(supabase: ReturnType<typeof getSupabaseClient>, realmId: string): Promise<string> {
-  const { data: conn, error } = await supabase
-    .from('qbo_connections')
-    .select('*')
-    .eq('realm_id', realmId)
-    .single()
-
-  if (error || !conn) throw new Error('QBO connection not found')
-
-  const now = new Date()
-  const expiresAt = new Date(conn.expires_at)
-
-  // Refresh if within 5 minutes of expiry
-  if (expiresAt.getTime() - now.getTime() < 5 * 60 * 1000) {
-    const clientId = process.env.QBO_CLIENT_ID!
-    const clientSecret = process.env.QBO_CLIENT_SECRET!
-    const basicAuth = Buffer.from(`${clientId}:${clientSecret}`).toString('base64')
-
-    const res = await fetch('https://oauth.platform.intuit.com/oauth2/v1/tokens/bearer', {
-      method: 'POST',
-      headers: {
-        Authorization: `Basic ${basicAuth}`,
-        'Content-Type': 'application/x-www-form-urlencoded',
-        Accept: 'application/json',
-      },
-      body: new URLSearchParams({
-        grant_type: 'refresh_token',
-        refresh_token: conn.refresh_token,
-      }).toString(),
-    })
-
-    if (!res.ok) throw new Error('Token refresh failed')
-
-    const tokens = await res.json()
-    const newExpiresAt = new Date(Date.now() + tokens.expires_in * 1000).toISOString()
-    const newRefreshExpiresAt = new Date(Date.now() + tokens.x_refresh_token_expires_in * 1000).toISOString()
-
-    await supabase
-      .from('qbo_connections')
-      .update({
-        access_token: tokens.access_token,
-        refresh_token: tokens.refresh_token,
-        expires_at: newExpiresAt,
-        refresh_expires_at: newRefreshExpiresAt,
-        updated_at: new Date().toISOString(),
-      })
-      .eq('realm_id', realmId)
-
-    return tokens.access_token
-  }
-
-  return conn.access_token
-}
-
 /**
- * Map our chart of accounts to QBO account names.
- * These should match the actual account names in the QBO company file.
+ * Fuzzy match a category name against QBO accounts.
+ * Strategy:
+ *   1. Exact match (case-insensitive)
+ *   2. Category is a substring of QBO name (or vice versa)
+ *   3. Any word in the category matches any word in QBO name
+ *   4. Fall back to "Uncategorized Expense" or "Ask My Accountant"
  */
-function mapCategoryToQBOAccount(category: string): string {
-  const map: Record<string, string> = {
-    'Revenue': 'Sales',
-    'COGS': 'Cost of Goods Sold',
-    'Advertising & Marketing': 'Advertising',
-    'Bank Charges & Fees': 'Bank Charges',
-    'Insurance': 'Insurance',
-    'Meals & Entertainment': 'Meals and Entertainment',
-    'Office Supplies': 'Office Supplies',
-    'Payroll & Wages': 'Payroll Expenses',
-    'Professional Fees': 'Professional Fees',
-    'Rent & Utilities': 'Rent or Lease',
-    'Software & Subscriptions': 'Software',
-    'Travel': 'Travel',
-    "Owner's Draw": "Owner's Draw",
-    'Miscellaneous': 'Miscellaneous',
+function resolveAccount(category: string, accounts: QBOAccount[]): QBOAccount | null {
+  const normalize = (s: string) => s.toLowerCase().replace(/[^a-z0-9 ]/g, '').trim()
+  const cat = normalize(category)
+
+  // 1. Exact match
+  let match = accounts.find(a => normalize(a.name) === cat)
+  if (match) return match
+
+  // 2. Substring match
+  match = accounts.find(
+    a => normalize(a.name).includes(cat) || cat.includes(normalize(a.name))
+  )
+  if (match) return match
+
+  // 3. Word-level match — any word in category appears in account name
+  const catWords = cat.split(' ').filter(w => w.length > 2)
+  if (catWords.length > 0) {
+    match = accounts.find(a => {
+      const aName = normalize(a.name)
+      return catWords.some(w => aName.includes(w))
+    })
+    if (match) return match
   }
-  return map[category] || 'Miscellaneous'
+
+  // 4. Fallback accounts
+  const FALLBACKS = ['uncategorized expense', 'ask my accountant', 'miscellaneous']
+  for (const fb of FALLBACKS) {
+    match = accounts.find(a => normalize(a.name).includes(fb))
+    if (match) return match
+  }
+
+  return null
 }
 
 async function pushPurchaseToQBO(
@@ -98,39 +68,23 @@ async function pushPurchaseToQBO(
     description: string
     amount: number
     final_category: string
-  }
+  },
+  accounts: QBOAccount[]
 ): Promise<{ success: boolean; qbo_id?: string; error?: string }> {
-  const accountName = mapCategoryToQBOAccount(tx.final_category)
-
-  // First, look up the account ref by name
-  const queryUrl = `${QBO_BASE_URL}/v3/company/${realmId}/query?query=${encodeURIComponent(
-    `SELECT Id, Name FROM Account WHERE Name = '${accountName}'`
-  )}&minorversion=65`
-
-  const queryRes = await fetch(queryUrl, {
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      Accept: 'application/json',
-    },
-  })
-
-  if (!queryRes.ok) {
-    return { success: false, error: `Account lookup failed: ${queryRes.status}` }
-  }
-
-  const queryData = await queryRes.json()
-  const accounts = queryData.QueryResponse?.Account || []
-  const account = accounts[0]
+  const account = resolveAccount(tx.final_category, accounts)
 
   if (!account) {
-    return { success: false, error: `Account not found in QBO: ${accountName}` }
+    return {
+      success: false,
+      error: `No matching QBO account for category: "${tx.final_category}"`,
+    }
   }
 
   const purchasePayload = {
     PaymentType: 'Cash',
     AccountRef: {
-      value: account.Id,
-      name: account.Name,
+      value: account.id,
+      name: account.name,
     },
     TxnDate: tx.date,
     PrivateNote: tx.description,
@@ -140,8 +94,8 @@ async function pushPurchaseToQBO(
         DetailType: 'AccountBasedExpenseLineDetail',
         AccountBasedExpenseLineDetail: {
           AccountRef: {
-            value: account.Id,
-            name: account.Name,
+            value: account.id,
+            name: account.name,
           },
         },
         Description: tx.description,
@@ -189,8 +143,19 @@ export async function POST(request: NextRequest) {
     }
 
     const supabase = getSupabaseClient()
-
     const accessToken = await getValidAccessToken(supabase, realm_id)
+
+    // Fetch actual QBO accounts once and reuse for all transactions
+    let qboAccounts: QBOAccount[] = []
+    try {
+      qboAccounts = await fetchQBOAccounts(accessToken, realm_id)
+    } catch (err) {
+      console.error('Failed to fetch QBO accounts:', err)
+      return NextResponse.json(
+        { error: 'Failed to fetch QBO chart of accounts' },
+        { status: 502 }
+      )
+    }
 
     const { data: transactions, error: fetchError } = await supabase
       .from('transactions')
@@ -216,13 +181,20 @@ export async function POST(request: NextRequest) {
     for (const tx of transactions) {
       const category = tx.final_category || tx.suggested_category || 'Miscellaneous'
 
-      // Skip credits (revenue) unless specifically handled
+      // Credits are income — not yet supported as QBO purchases
       if (tx.type === 'credit') {
         await supabase
           .from('transactions')
-          .update({ status: 'pushed', qbo_id: null, push_error: 'Skipped: credit transaction' })
+          .update({
+            status: 'push_failed',
+            push_error: 'Income transactions not yet supported — coming soon',
+          })
           .eq('id', tx.id)
-        results.push({ id: tx.id, success: true, qbo_id: 'skipped_credit' })
+        results.push({
+          id: tx.id,
+          success: false,
+          error: 'Income transactions not yet supported — coming soon',
+        })
         continue
       }
 
@@ -232,7 +204,7 @@ export async function POST(request: NextRequest) {
         description: tx.description,
         amount: tx.amount,
         final_category: category,
-      })
+      }, qboAccounts)
 
       if (result.success) {
         await supabase
@@ -252,11 +224,7 @@ export async function POST(request: NextRequest) {
     const pushed = results.filter(r => r.success).length
     const failed = results.filter(r => !r.success).length
 
-    return NextResponse.json({
-      pushed,
-      failed,
-      results,
-    })
+    return NextResponse.json({ pushed, failed, results })
   } catch (err) {
     console.error('Push error:', err)
     return NextResponse.json({ error: 'Push to QuickBooks failed' }, { status: 500 })

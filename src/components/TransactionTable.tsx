@@ -2,7 +2,14 @@
 
 import { useState, useMemo } from 'react'
 
-const CHART_OF_ACCOUNTS = [
+export interface QBOAccount {
+  id: string
+  name: string
+  accountType: string
+  accountSubType: string
+}
+
+const FALLBACK_CHART_OF_ACCOUNTS = [
   'Revenue',
   'COGS',
   'Advertising & Marketing',
@@ -42,6 +49,7 @@ interface TransactionTableProps {
   onPush: (ids: string[]) => void
   isPushing: boolean
   threshold?: number  // flag rows below this confidence %
+  qboAccounts?: QBOAccount[]  // live accounts from connected QBO company
 }
 
 function getConfidenceBadgeClass(confidence: number, threshold: number): string {
@@ -71,7 +79,12 @@ export function TransactionTable({
   onPush,
   isPushing,
   threshold = 95,
+  qboAccounts = [],
 }: TransactionTableProps) {
+  const categoryOptions: string[] =
+    qboAccounts.length > 0
+      ? qboAccounts.map(a => a.name)
+      : [...FALLBACK_CHART_OF_ACCOUNTS]
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [filter, setFilter] = useState<FilterTab>('all')
   const [tooltipId, setTooltipId] = useState<string | null>(null)
@@ -275,7 +288,7 @@ export function TransactionTable({
                         className="bg-zinc-800 border border-zinc-700 text-zinc-200 text-xs rounded-md px-2 py-1.5 w-full focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed"
                       >
                         <option value="">— Select —</option>
-                        {CHART_OF_ACCOUNTS.map(cat => (
+                        {categoryOptions.map(cat => (
                           <option key={cat} value={cat}>{cat}</option>
                         ))}
                       </select>
